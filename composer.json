@@ -11,10 +11,9 @@
     ],
     "require": {
         "php": ">=7",
-        "guzzlehttp/guzzle": "^6.3"
-    },
-    "suggest": {
-        "ext-curl": "To send requests using cURL"
+        "guzzlehttp/guzzle": "^6.3",
+        "ext-curl": "*",
+        "ext-json": "*"
     },
     "autoload": {
         "psr-4": {
