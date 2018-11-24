@@ -1,0 +1,34 @@
+{
+    "name": "djohnston08/plaid-php",
+    "description": "Plaid PHP, provides SDK to interact with Plaid.com API",
+    "keywords": ["plaid", "fintech"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "David Johnston",
+            "email": "davidjohnston05@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=7",
+        "guzzlehttp/guzzle": "^6.3"
+    },
+    "suggest": {
+        "ext-curl": "To send requests using cURL"
+    },
+    "autoload": {
+        "psr-4": {
+            "DJohnston\\Plaid\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "DJohnston\\Plaid\\": "tests"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-master": "0.1-dev"
+        }
+    }
+}
