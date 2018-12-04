@@ -7,66 +7,37 @@ use GuzzleHttp\Exception\TransferException;
 
 class PlaidClient
 {
-    const ENV_SANDBOX = 'sandbox';
-    const ENV_DEVELOPMENT = 'development';
-    const ENV_PRODUCTION = 'production';
-    const ENVIRONMENTS = [
-        self::ENV_DEVELOPMENT,
-        self::ENV_SANDBOX,
-        self::ENV_PRODUCTION,
-    ];
-
-    /**
-     * @var string
-     */
-    private $env;
-
-    /**
-     * @var string
-     */
-    private $client_id;
-
-    /**
-     * @var string
-     */
-    private $secret;
-
-    /**
-     * @var string
-     */
-    private $public_key;
-
-    /**
-     * @var string
-     */
-    private $api_version;
-
     /**
      * @var Client
      */
     private $httpClient;
 
-    public function __construct(array $config)
+    /**
+     * @var PlaidClientOptions
+     */
+    private $options;
+
+    /**
+     * PlaidClient constructor.
+     *
+     * @param PlaidClientOptions $options
+     */
+    public function __construct(PlaidClientOptions $options)
     {
-        $env = $config['env'];
-        if (!$this->isValidEnvironment($env)) {
-            throw new \RuntimeException(sprintf('Invalid Plaid environment.  Please choose from the following: [%s]', implode(', ', self::ENVIRONMENTS)), 2);
-        }
-
-        $this->env = $env;
-        $baseUri = $this->getUriFromEnvironment();
-        $this->httpClient = new Client(['base_uri' => $baseUri]);
-
-        $this->client_id = $config['client_id'];
-        $this->secret = $config['secret'];
-        $this->public_key = $config['public_key'];
-        $this->api_version = $config['api_version'];
+        $this->options = $options;
+        $this->httpClient = new Client(['base_uri' => $options->getBaseUri()]);
     }
 
     //
     // Plaid API Endpoints
     //
 
+    /**
+     * Create one-time use public token to initialize Link for update.
+     *
+     * @param string $accessToken
+     * @return PlaidResponse
+     */
     public function createPublicToken(string $accessToken)
     {
         return $this->handleClientIdRequest('/item/public_token/create', [
@@ -81,38 +52,72 @@ class PlaidClient
         ]);
     }
     
-    public function createProcessorToken()
+    private function createProcessorToken(string $processor, string $accessToken, string $accountId)
     {
+        $path = $processor === 'stripe' ? '/processor/stripe/bank_account_token/create' : sprintf('/processor/%s/processor_token/create', $processor);
+
+        return $this->handleClientIdRequest($path, [
+            'access_token' => $accessToken,
+            'account_id' => $accountId
+        ]);
     }
 
-    public function invalidateAccessToken()
+    public function createStripeToken(string $accessToken, string $accountId)
     {
-        //
+        return $this->createProcessorToken('stripe', $accessToken, $accountId);
     }
 
-    public function updateAccessTokenVersion()
+    public function createApexToken(string $accessToken, string $accountId)
     {
-        //
+        return $this->createProcessorToken('apex', $accessToken, $accountId);
     }
 
-    public function removeItem()
+    public function createDwollaToken(string $accessToken, string $accountId)
     {
-        //
+        return $this->createProcessorToken('dwolla', $accessToken, $accountId);
     }
 
-    public function getItem()
+    public function invalidateAccessToken(string $accessToken)
     {
-        //
+        return $this->handleClientIdRequest('/item/access_token/invalidate', [
+            'access_token' => $accessToken,
+        ]);
     }
 
-    public function updateItemWebhook()
+    public function updateAccessTokenVersion(string $accessToken)
     {
-        //
+        return $this->handleClientIdRequest('/item/access_token/update_version', [
+            'access_token_v1' => $accessToken,
+        ]);
     }
 
-    public function getAccounts()
+    public function removeItem(string $accessToken)
     {
-        //
+        return $this->handleClientIdRequest('/item/remove', [
+            'access_token' => $accessToken,
+        ]);
+    }
+
+    public function getItem(string $accessToken)
+    {
+        return $this->handleClientIdRequest('/item/get', [
+            'access_token' => $accessToken,
+        ]);
+    }
+
+    public function updateItemWebhook(string $accessToken, string $webhook)
+    {
+        return $this->handleClientIdRequest('/item/webhook/update', [
+            'access_token' => $accessToken,
+            'webhook' => $webhook
+        ]);
+    }
+
+    public function getAccounts(string $accessToken)
+    {
+        return $this->handleClientIdRequest('/accounts/get', [
+            'access_token' => $accessToken,
+        ]);
     }
 
     public function getBalance()
@@ -154,11 +159,6 @@ class PlaidClient
         //
     }
 
-    public function createStripeToken()
-    {
-        //
-    }
-
     public function getInstitutions()
     {
         //
@@ -193,50 +193,18 @@ class PlaidClient
         //
     }
 
-    /**
-     * @param string $env
-     * @return bool
-     */
-    private function isValidEnvironment(string $env)
-    {
-        return in_array($env, self::ENVIRONMENTS);
-    }
-
-    /**
-     * @return string
-     */
-    private function getUriFromEnvironment()
-    {
-        switch ($this->env) {
-            case self::ENV_SANDBOX:
-                return 'https://sandbox.plaid.com';
-
-                break;
-            case self::ENV_DEVELOPMENT:
-                return 'https://development.plaid.com';
-
-                break;
-            case self::ENV_PRODUCTION:
-                return 'https://api.plaid.com';
-
-                break;
-        }
-
-        throw new \RuntimeException('Code should never be reached.  Get uri called from invalid environment');
-    }
-
     private function handleClientIdRequest(string $path, array $body)
     {
         return $this->handleRequest($path, array_merge($body, [
-            'client_id' => $this->client_id,
-            'secret' => $this->secret
+            'client_id' => $this->options->getClientId(),
+            'secret' => $this->options->getSecret()
         ]));
     }
 
     private function handlePublicKeyRequest(string $path, array $body)
     {
         return $this->handleRequest($path, array_merge($body, [
-            'public_key' => $this->public_key
+            'public_key' => $this->options->getPublicKey()
         ]));
     }
 
@@ -244,8 +212,8 @@ class PlaidClient
     {
         $headers = [
             'Content-Type' => 'application/json',
-            'Plaid-Version' => $this->api_version,
-            'User-Agent' => 'Plaid Laravel v'.config('plaid.plaid_laravel_version'),
+            'Plaid-Version' => $this->options->getApiVersion(),
+            'User-Agent' => 'Plaid Laravel v0.1.0',
         ];
 
         try {
